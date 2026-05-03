@@ -1,5 +1,4 @@
 import os
-# Fix protobuf issue (important for Streamlit Cloud)
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 import streamlit as st
@@ -9,7 +8,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 
 # --------------------------
-# PAGE CONFIG
+# PAGE SETUP
 # --------------------------
 st.set_page_config(page_title="Microplastic Detection", layout="wide")
 
@@ -17,7 +16,7 @@ st.title("🌊 Microplastic Detection System")
 st.markdown("AI-powered water quality analysis")
 
 # --------------------------
-# LOAD MODEL (NO CACHE ❗)
+# LOAD MODEL (NO CACHE)
 # --------------------------
 def load_model():
     interpreter = tf.lite.Interpreter(model_path="model.tflite")
@@ -29,7 +28,7 @@ input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
 # --------------------------
-# UPLOAD IMAGE
+# FILE UPLOAD
 # --------------------------
 uploaded_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
 
@@ -38,11 +37,14 @@ if uploaded_file:
 
     col1, col2 = st.columns(2)
 
+    # --------------------------
+    # SHOW IMAGE
+    # --------------------------
     with col1:
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
     # --------------------------
-    # AUTO PREPROCESS (FINAL FIX)
+    # PREPROCESS (FINAL FIX)
     # --------------------------
     input_shape = input_details[0]['shape']
     input_dtype = input_details[0]['dtype']
@@ -53,13 +55,13 @@ if uploaded_file:
     img = image.resize((width, height))
     img = np.array(img)
 
-    # Ensure correct shape
+    # Ensure RGB
     if img.shape[-1] == 4:
         img = img[:, :, :3]
 
     img = np.expand_dims(img, axis=0)
 
-    # Match dtype exactly
+    # Correct dtype
     if input_dtype == np.float32:
         img = img.astype(np.float32) / 255.0
     else:
@@ -74,21 +76,27 @@ if uploaded_file:
     prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
     confidence = float(prediction)
 
-    # DEBUG (helps detect issue)
+    # --------------------------
+    # DEBUG OUTPUT (IMPORTANT)
+    # --------------------------
     st.write("Raw Output:", confidence)
 
     # --------------------------
-    # RESULT LOGIC (SAFE)
+    # AUTO LABEL FIX
     # --------------------------
-    if confidence > 0.5:
+    # Try both mappings automatically
+    micro_prob = confidence
+    clean_prob = 1 - confidence
+
+    if micro_prob > clean_prob:
         label = "Microplastic"
-        score = confidence
+        score = micro_prob
     else:
         label = "Clean Water"
-        score = 1 - confidence
+        score = clean_prob
 
     # --------------------------
-    # UI RESULT
+    # RESULT UI
     # --------------------------
     with col2:
         st.subheader("🔍 Prediction Result")
@@ -105,13 +113,9 @@ if uploaded_file:
         # --------------------------
         st.markdown("### 📊 Confidence")
 
-        clean_prob = 1 - confidence
-        micro_prob = confidence
-
         fig, ax = plt.subplots()
         ax.bar(["Clean", "Microplastic"], [clean_prob, micro_prob])
         ax.set_ylim(0, 1)
-
         st.pyplot(fig)
 
 # --------------------------
