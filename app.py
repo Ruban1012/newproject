@@ -10,13 +10,13 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Microplastic Detection", layout="wide")
 
 # --------------------------
-# Custom UI Styling
+# UI Styling
 # --------------------------
 st.markdown("""
 <style>
 .big-title {
     text-align: center;
-    font-size: 42px;
+    font-size: 40px;
     font-weight: bold;
     color: #00bcd4;
 }
@@ -37,7 +37,7 @@ st.markdown('<p class="sub-text">AI-powered water quality analysis using MobileN
 st.markdown("---")
 
 # --------------------------
-# Load TFLite Model
+# Load Model
 # --------------------------
 @st.cache_resource
 def load_model():
@@ -77,11 +77,21 @@ if uploaded_file:
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
     # --------------------------
-    # Preprocessing (IMPORTANT)
+    # ✅ FIXED PREPROCESSING
     # --------------------------
     img = image.resize((224, 224))
-    img = np.array(img).astype("float32") / 255.0
+    img = np.array(img)
+
+    # Fix RGBA → RGB
+    if img.shape[-1] == 4:
+        img = img[:, :, :3]
+
+    img = img.astype(np.float32) / 255.0
     img = np.expand_dims(img, axis=0)
+
+    # Match model dtype
+    if input_details[0]['dtype'] == np.uint8:
+        img = (img * 255).astype(np.uint8)
 
     # --------------------------
     # Prediction
@@ -105,11 +115,9 @@ if uploaded_file:
 
         st.metric("Confidence Score", f"{confidence*100:.2f}%")
 
-        # Low confidence warning
         if 0.4 < confidence < 0.6:
             st.warning("⚠️ Model is uncertain about this prediction")
 
-        # Progress bar
         st.progress(confidence)
 
         # --------------------------
@@ -122,7 +130,7 @@ if uploaded_file:
 
         fig, ax = plt.subplots()
         ax.bar(labels, values)
-        ax.set_ylim(0,1)
+        ax.set_ylim(0, 1)
         ax.set_ylabel("Probability")
         ax.set_title("Prediction Confidence")
 
