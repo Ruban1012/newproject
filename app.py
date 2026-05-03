@@ -1,125 +1,182 @@
 import streamlit as st
+import tensorflow as tf
 import numpy as np
 from PIL import Image
-import tensorflow as tf
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+import pandas as pd
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
+from tensorflow.keras.models import Model
 
-# --------------------------
-# Page Config
-# --------------------------
-st.set_page_config(page_title="Microplastic Detection", layout="wide")
+# =========================
+# PAGE CONFIG
+# =========================
+st.set_page_config(page_title="Microplastic Detection", layout="centered")
 
-st.title("🌊 Microplastic Detection System")
-st.markdown("AI-powered water quality analysis")
+# =========================
+# DARK THEME UI
+# =========================
+st.markdown("""
+<style>
+body {
+    background-color: #0e1117;
+}
+.block-container {
+    padding-top: 2rem;
+}
+.big-title {
+    font-size: 42px;
+    font-weight: bold;
+    text-align: center;
+    color: #00d4ff;
+}
+.sub-text {
+    text-align: center;
+    color: #aaaaaa;
+    font-size: 18px;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# --------------------------
-# Load Model
-# --------------------------
+# =========================
+# TITLE
+# =========================
+st.markdown('<p class="big-title">🌊 Microplastic Detection System</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-text">AI-powered water quality analysis</p>', unsafe_allow_html=True)
+
+# =========================
+# SIDEBAR
+# =========================
+st.sidebar.title("About Project")
+st.sidebar.write("""
+This system uses Deep Learning (MobileNetV2) 
+to detect microplastics in water samples.
+""")
+
+# =========================
+# BUILD MODEL
+# =========================
+def build_model():
+    base_model = MobileNetV2(weights=None, include_top=False, input_shape=(224,224,3))
+
+    for layer in base_model.layers:
+        layer.trainable = False
+
+    x = GlobalAveragePooling2D()(base_model.output)
+    x = Dense(128, activation='relu')(x)
+    x = Dropout(0.3)(x)
+    output = Dense(1, activation='sigmoid')(x)
+
+    model = Model(inputs=base_model.input, outputs=output)
+    return model
+
+# =========================
+# LOAD MODEL
+# =========================
 @st.cache_resource
 def load_model():
-    interpreter = tf.lite.Interpreter(model_path="model.tflite")
-    interpreter.allocate_tensors()
-    return interpreter
+    model = build_model()
+    model.load_weights("model.weights.h5")
+    return model
 
-interpreter = load_model()
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+model = load_model()
 
-# --------------------------
-# Upload Image
-# --------------------------
-uploaded_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
+# =========================
+# FILE UPLOAD
+# =========================
+uploaded_file = st.file_uploader("📤 Upload an image", type=["jpg", "png", "jpeg"])
 
 if uploaded_file:
-    image = Image.open(uploaded_file)
+    img = Image.open(uploaded_file).convert("RGB")
+    img = img.resize((224,224))
 
-    col1, col2 = st.columns(2)
+    st.image(img, caption="Uploaded Image", use_column_width=True)
 
-    with col1:
-        st.image(image, caption="Uploaded Image", use_column_width=True)
+    # =========================
+    # PREPROCESS
+    # =========================
+    img_array = np.array(img) / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
 
-    # --------------------------
-    # AUTO PREPROCESS
-    # --------------------------
-    input_shape = input_details[0]['shape']
-    input_dtype = input_details[0]['dtype']
+    # =========================
+    # PREDICTION
+    # =========================
+    prediction = model.predict(img_array)
+    confidence = prediction[0][0]
 
-    height = input_shape[1]
-    width = input_shape[2]
+    # =========================
+    # RESULT
+    # =========================
+    st.subheader("🔍 Prediction Result")
 
-    img = image.resize((width, height))
-    img = np.array(img)
-
-    # Fix RGBA → RGB
-    if img.shape[-1] == 4:
-        img = img[:, :, :3]
-
-    img = np.expand_dims(img, axis=0)
-
-    # dtype handling
-    if input_dtype == np.float32:
-        img = img.astype(np.float32) / 255.0
-    else:
-        img = img.astype(np.uint8)
-
-    # --------------------------
-    # Prediction
-    # --------------------------
-    interpreter.set_tensor(input_details[0]['index'], img)
-    interpreter.invoke()
-    prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
-
-    confidence = float(prediction)
-
-    # --------------------------
-    # 🔥 AUTO LABEL FIX (IMPORTANT)
-    # --------------------------
-    # We don't assume class mapping → we infer it
     if confidence > 0.5:
-        prob_micro = confidence
-        prob_clean = 1 - confidence
+        st.error("🧪 Microplastic Detected")
+        st.metric("Confidence", f"{confidence*100:.2f}%")
     else:
-        prob_micro = confidence
-        prob_clean = 1 - confidence
+        st.success("💧 Clean Water")
+        st.metric("Confidence", f"{(1-confidence)*100:.2f}%")
 
-    # Decide final label safely
-    if prob_micro > prob_clean:
-        label = "Microplastic"
-        display_conf = prob_micro
+    # =========================
+    # PROBABILITIES
+    # =========================
+    clean_prob = float(1 - confidence)
+    micro_prob = float(confidence)
+
+    # =========================
+    # 📊 BAR GRAPH (FIXED)
+    # =========================
+    st.subheader("📊 Confidence Bar Graph")
+
+    df = pd.DataFrame({
+        "Class": ["Clean Water", "Microplastic"],
+        "Probability": [clean_prob, micro_prob]
+    })
+
+    st.bar_chart(df.set_index("Class"))
+
+    # =========================
+    # 🍩 DONUT CHART
+    # =========================
+    st.subheader("🍩 Prediction Distribution")
+
+    fig = go.Figure(data=[go.Pie(
+        labels=['Clean Water', 'Microplastic'],
+        values=[clean_prob, micro_prob],
+        hole=0.6
+    )])
+
+    fig.update_traces(textinfo='percent+label', pull=[0.05, 0.05])
+    st.plotly_chart(fig, use_container_width=True)
+
+    # =========================
+    # 🎯 GAUGE FIXED
+    # =========================
+    st.subheader("🎯 Confidence Meter")
+
+    if confidence > 0.5:
+        gauge_value = confidence * 100
     else:
-        label = "Clean Water"
-        display_conf = prob_clean
+        gauge_value = (1 - confidence) * 100
 
-    # --------------------------
-    # UI RESULT
-    # --------------------------
-    with col2:
-        st.subheader("🔍 Prediction Result")
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=gauge_value,
+        title={'text': "Confidence (%)"},
+        gauge={
+            'axis': {'range': [0, 100]},
+            'bar': {'color': "cyan"},
+            'steps': [
+                {'range': [0, 50], 'color': "#ff4b4b"},
+                {'range': [50, 80], 'color': "#ffa600"},
+                {'range': [80, 100], 'color': "#00ff9c"}
+            ]
+        }
+    ))
 
-        st.write("Raw Model Output:", confidence)
+    st.plotly_chart(fig, use_container_width=True)
 
-        if label == "Microplastic":
-            st.error(f"⚠️ Microplastic Detected ({display_conf*100:.2f}%)")
-        else:
-            st.success(f"💧 Clean Water ({display_conf*100:.2f}%)")
-
-        # Progress
-        st.progress(display_conf)
-
-        # Chart
-        st.markdown("### 📊 Confidence")
-
-        labels = ["Clean", "Microplastic"]
-        values = [prob_clean, prob_micro]
-
-        fig, ax = plt.subplots()
-        ax.bar(labels, values)
-        ax.set_ylim(0, 1)
-
-        st.pyplot(fig)
-
-# --------------------------
-# Footer
-# --------------------------
-st.markdown("---")
-st.markdown("Final Year Project | Microplastic Detection")
+    # =========================
+    # 📊 PROGRESS BAR
+    # =========================
+    st.subheader("📊 Confidence Level")
+    st.progress(int(gauge_value))
