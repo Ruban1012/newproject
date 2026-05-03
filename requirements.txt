@@ -3,3 +3,4 @@ tensorflow-cpu==2.15.0
 numpy
 pillow
 matplotlib
+protobuf==3.20.3
