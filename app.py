@@ -120,7 +120,7 @@ if uploaded_file:
         else:
             st.success("💧 Clean Water")
 
-        st.metric("Confidence Score", f"{confidence*100:.2f}%")
+        st.metric("Confidence Score", f"{confidence*98:.2f}%")
 
         if 0.4 < confidence < 0.6:
             st.warning("⚠️ Model is uncertain about this prediction")
