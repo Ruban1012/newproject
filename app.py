@@ -1,5 +1,5 @@
 import os
-# 🔥 FIX protobuf issue (VERY IMPORTANT)
+# Fix protobuf issue (important for Streamlit Cloud)
 os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 
 import streamlit as st
@@ -17,9 +17,8 @@ st.title("🌊 Microplastic Detection System")
 st.markdown("AI-powered water quality analysis")
 
 # --------------------------
-# LOAD TFLITE MODEL
+# LOAD MODEL (NO CACHE ❗)
 # --------------------------
-@st.cache_resource
 def load_model():
     interpreter = tf.lite.Interpreter(model_path="model.tflite")
     interpreter.allocate_tensors()
@@ -43,7 +42,7 @@ if uploaded_file:
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
     # --------------------------
-    # AUTO PREPROCESS (SAFE)
+    # AUTO PREPROCESS (FINAL FIX)
     # --------------------------
     input_shape = input_details[0]['shape']
     input_dtype = input_details[0]['dtype']
@@ -54,8 +53,13 @@ if uploaded_file:
     img = image.resize((width, height))
     img = np.array(img)
 
+    # Ensure correct shape
+    if img.shape[-1] == 4:
+        img = img[:, :, :3]
+
     img = np.expand_dims(img, axis=0)
 
+    # Match dtype exactly
     if input_dtype == np.float32:
         img = img.astype(np.float32) / 255.0
     else:
@@ -70,11 +74,12 @@ if uploaded_file:
     prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
     confidence = float(prediction)
 
-    # --------------------------
-    # RESULT (SAFE LOGIC)
-    # --------------------------
+    # DEBUG (helps detect issue)
     st.write("Raw Output:", confidence)
 
+    # --------------------------
+    # RESULT LOGIC (SAFE)
+    # --------------------------
     if confidence > 0.5:
         label = "Microplastic"
         score = confidence
@@ -82,6 +87,9 @@ if uploaded_file:
         label = "Clean Water"
         score = 1 - confidence
 
+    # --------------------------
+    # UI RESULT
+    # --------------------------
     with col2:
         st.subheader("🔍 Prediction Result")
 
