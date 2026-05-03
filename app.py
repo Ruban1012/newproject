@@ -1,29 +1,24 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
-from tflite_runtime.interpreter import Interpreter
+import tensorflow as tf
 import matplotlib.pyplot as plt
-# =========================
-# PAGE CONFIG
-# =========================
-st.set_page_config(page_title="Microplastic Detection", layout="centered")
 
-# =========================
-# DARK THEME UI
-# =========================
+# --------------------------
+# Page Config
+# --------------------------
+st.set_page_config(page_title="Microplastic Detection", layout="wide")
+
+# --------------------------
+# Custom UI Styling
+# --------------------------
 st.markdown("""
 <style>
-body {
-    background-color: #0e1117;
-}
-.block-container {
-    padding-top: 2rem;
-}
 .big-title {
+    text-align: center;
     font-size: 42px;
     font-weight: bold;
-    text-align: center;
-    color: #00d4ff;
+    color: #00bcd4;
 }
 .sub-text {
     text-align: center;
@@ -33,145 +28,108 @@ body {
 </style>
 """, unsafe_allow_html=True)
 
-# =========================
-# TITLE
-# =========================
+# --------------------------
+# Header
+# --------------------------
 st.markdown('<p class="big-title">🌊 Microplastic Detection System</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-text">AI-powered water quality analysis</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-text">AI-powered water quality analysis using MobileNetV2</p>', unsafe_allow_html=True)
 
-# =========================
-# SIDEBAR
-# =========================
-st.sidebar.title("About Project")
+st.markdown("---")
+
+# --------------------------
+# Load TFLite Model
+# --------------------------
+@st.cache_resource
+def load_model():
+    interpreter = tf.lite.Interpreter(model_path="model.tflite")
+    interpreter.allocate_tensors()
+    return interpreter
+
+interpreter = load_model()
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+
+# --------------------------
+# Sidebar
+# --------------------------
+st.sidebar.title("📌 About Project")
 st.sidebar.write("""
-This system uses Deep Learning (MobileNetV2) 
+This system uses Deep Learning (MobileNetV2)  
 to detect microplastics in water samples.
 """)
 
-# =========================
-# BUILD MODEL
-# =========================
-def build_model():
-    base_model = MobileNetV2(weights=None, include_top=False, input_shape=(224,224,3))
+threshold = st.sidebar.slider("Detection Threshold", 0.3, 0.9, 0.5)
 
-    for layer in base_model.layers:
-        layer.trainable = False
+# --------------------------
+# Upload Section
+# --------------------------
+st.markdown("## 📤 Upload Water Sample Image")
 
-    x = GlobalAveragePooling2D()(base_model.output)
-    x = Dense(128, activation='relu')(x)
-    x = Dropout(0.3)(x)
-    output = Dense(1, activation='sigmoid')(x)
-
-    model = Model(inputs=base_model.input, outputs=output)
-    return model
-
-# =========================
-# LOAD MODEL
-# =========================
-@st.cache_resource
-def load_model():
-    model = build_model()
-    model.load_weights("model.weights.h5")
-    return model
-
-model = load_model()
-
-# =========================
-# FILE UPLOAD
-# =========================
-uploaded_file = st.file_uploader("📤 Upload an image", type=["jpg", "png", "jpeg"])
+uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "png", "jpeg"])
 
 if uploaded_file:
-    img = Image.open(uploaded_file).convert("RGB")
-    img = img.resize((224,224))
+    image = Image.open(uploaded_file)
 
-    st.image(img, caption="Uploaded Image", use_column_width=True)
+    col1, col2 = st.columns(2)
 
-    # =========================
-    # PREPROCESS
-    # =========================
-    img_array = np.array(img) / 255.0
-    img_array = np.expand_dims(img_array, axis=0)
+    # Show Image
+    with col1:
+        st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    # =========================
-    # PREDICTION
-    # =========================
-    prediction = model.predict(img_array)
-    confidence = prediction[0][0]
+    # --------------------------
+    # Preprocessing (IMPORTANT)
+    # --------------------------
+    img = image.resize((224, 224))
+    img = np.array(img).astype("float32") / 255.0
+    img = np.expand_dims(img, axis=0)
 
-    # =========================
-    # RESULT
-    # =========================
-    st.subheader("🔍 Prediction Result")
+    # --------------------------
+    # Prediction
+    # --------------------------
+    interpreter.set_tensor(input_details[0]['index'], img)
+    interpreter.invoke()
+    prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
 
-    if confidence > 0.5:
-        st.error("🧪 Microplastic Detected")
-        st.metric("Confidence", f"{confidence*100:.2f}%")
-    else:
-        st.success("💧 Clean Water")
-        st.metric("Confidence", f"{(1-confidence)*100:.2f}%")
+    confidence = float(prediction)
 
-    # =========================
-    # PROBABILITIES
-    # =========================
-    clean_prob = float(1 - confidence)
-    micro_prob = float(confidence)
+    # --------------------------
+    # Result UI
+    # --------------------------
+    with col2:
+        st.markdown("## 🔍 Prediction Result")
 
-    # =========================
-    # 📊 BAR GRAPH (FIXED)
-    # =========================
-    st.subheader("📊 Confidence Bar Graph")
+        if confidence >= threshold:
+            st.error("⚠️ Microplastic Detected")
+        else:
+            st.success("💧 Clean Water")
 
-    df = pd.DataFrame({
-        "Class": ["Clean Water", "Microplastic"],
-        "Probability": [clean_prob, micro_prob]
-    })
+        st.metric("Confidence Score", f"{confidence*100:.2f}%")
 
-    st.bar_chart(df.set_index("Class"))
+        # Low confidence warning
+        if 0.4 < confidence < 0.6:
+            st.warning("⚠️ Model is uncertain about this prediction")
 
-    # =========================
-    # 🍩 DONUT CHART
-    # =========================
-    st.subheader("🍩 Prediction Distribution")
+        # Progress bar
+        st.progress(confidence)
 
-    fig = go.Figure(data=[go.Pie(
-        labels=['Clean Water', 'Microplastic'],
-        values=[clean_prob, micro_prob],
-        hole=0.6
-    )])
+        # --------------------------
+        # Graph
+        # --------------------------
+        st.markdown("### 📊 Confidence Distribution")
 
-    fig.update_traces(textinfo='percent+label', pull=[0.05, 0.05])
-    st.plotly_chart(fig, use_container_width=True)
+        labels = ['Clean Water', 'Microplastic']
+        values = [1-confidence, confidence]
 
-    # =========================
-    # 🎯 GAUGE FIXED
-    # =========================
-    st.subheader("🎯 Confidence Meter")
+        fig, ax = plt.subplots()
+        ax.bar(labels, values)
+        ax.set_ylim(0,1)
+        ax.set_ylabel("Probability")
+        ax.set_title("Prediction Confidence")
 
-    if confidence > 0.5:
-        gauge_value = confidence * 100
-    else:
-        gauge_value = (1 - confidence) * 100
+        st.pyplot(fig)
 
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=gauge_value,
-        title={'text': "Confidence (%)"},
-        gauge={
-            'axis': {'range': [0, 100]},
-            'bar': {'color': "cyan"},
-            'steps': [
-                {'range': [0, 50], 'color': "#ff4b4b"},
-                {'range': [50, 80], 'color': "#ffa600"},
-                {'range': [80, 100], 'color': "#00ff9c"}
-            ]
-        }
-    ))
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    # =========================
-    # 📊 PROGRESS BAR
-    # =========================
-    st.subheader("📊 Confidence Level")
-    st.progress(int(gauge_value))
+# --------------------------
+# Footer
+# --------------------------
+st.markdown("---")
+st.markdown("👨‍💻 Final Year Project | Microplastic Detection using Deep Learning")
