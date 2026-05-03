@@ -1,4 +1,5 @@
-rich
-markdown-it-py
-mdurl
-pygments
+streamlit==1.32.0
+tensorflow-cpu==2.15.0
+numpy
+pillow
+matplotlib
