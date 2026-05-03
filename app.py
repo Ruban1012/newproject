@@ -1,13 +1,8 @@
 import streamlit as st
-import tensorflow as tf
 import numpy as np
 from PIL import Image
-import plotly.graph_objects as go
-import pandas as pd
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
-from tensorflow.keras.models import Model
-
+from tflite_runtime.interpreter import Interpreter
+import matplotlib.pyplot as plt
 # =========================
 # PAGE CONFIG
 # =========================
