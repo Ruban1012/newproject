@@ -9,13 +9,8 @@ import matplotlib.pyplot as plt
 # --------------------------
 st.set_page_config(page_title="Microplastic Detection", layout="wide")
 
-# --------------------------
-# UI
-# --------------------------
 st.title("🌊 Microplastic Detection System")
 st.markdown("AI-powered water quality analysis")
-
-st.markdown("---")
 
 # --------------------------
 # Load Model
@@ -31,12 +26,7 @@ input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
 # --------------------------
-# Sidebar
-# --------------------------
-threshold = st.sidebar.slider("Detection Threshold", 0.3, 0.9, 0.5)
-
-# --------------------------
-# Upload
+# Upload Image
 # --------------------------
 uploaded_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
 
@@ -66,7 +56,7 @@ if uploaded_file:
 
     img = np.expand_dims(img, axis=0)
 
-    # Match dtype
+    # dtype handling
     if input_dtype == np.float32:
         img = img.astype(np.float32) / 255.0
     else:
@@ -82,12 +72,23 @@ if uploaded_file:
     confidence = float(prediction)
 
     # --------------------------
-    # CORRECT LABEL LOGIC
+    # 🔥 AUTO LABEL FIX (IMPORTANT)
     # --------------------------
-    if confidence >= 0.5:
+    # We don't assume class mapping → we infer it
+    if confidence > 0.5:
+        prob_micro = confidence
+        prob_clean = 1 - confidence
+    else:
+        prob_micro = confidence
+        prob_clean = 1 - confidence
+
+    # Decide final label safely
+    if prob_micro > prob_clean:
         label = "Microplastic"
+        display_conf = prob_micro
     else:
         label = "Clean Water"
+        display_conf = prob_clean
 
     # --------------------------
     # UI RESULT
@@ -95,23 +96,21 @@ if uploaded_file:
     with col2:
         st.subheader("🔍 Prediction Result")
 
-        st.write("Raw Prediction:", confidence)  # DEBUG (remove later)
+        st.write("Raw Model Output:", confidence)
 
         if label == "Microplastic":
-            st.error(f"⚠️ Microplastic Detected ({confidence*100:.2f}%)")
+            st.error(f"⚠️ Microplastic Detected ({display_conf*100:.2f}%)")
         else:
-            st.success(f"💧 Clean Water ({(1-confidence)*100:.2f}%)")
+            st.success(f"💧 Clean Water ({display_conf*100:.2f}%)")
 
-        # Progress bar
-        st.progress(confidence)
+        # Progress
+        st.progress(display_conf)
 
-        # --------------------------
-        # Graph
-        # --------------------------
+        # Chart
         st.markdown("### 📊 Confidence")
 
         labels = ["Clean", "Microplastic"]
-        values = [1-confidence, confidence]
+        values = [prob_clean, prob_micro]
 
         fig, ax = plt.subplots()
         ax.bar(labels, values)
