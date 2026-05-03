@@ -1,6 +1,4 @@
-streamlit
-tensorflow
-numpy
-pillow
-plotly
-pandas
+rich
+markdown-it-py
+mdurl
+pygments
