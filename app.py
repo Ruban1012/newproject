@@ -1,19 +1,19 @@
 import streamlit as st
 import numpy as np
 from PIL import Image
+import tensorflow as tf
 import matplotlib.pyplot as plt
-from tflite_runtime.interpreter import Interpreter
 
 st.set_page_config(page_title="Microplastic Detection", layout="wide")
 
 st.title("🌊 Microplastic Detection System")
 
 # --------------------------
-# Load TFLite Model
+# Load Model
 # --------------------------
 @st.cache_resource
 def load_model():
-    interpreter = Interpreter(model_path="model.tflite")
+    interpreter = tf.lite.Interpreter(model_path="model.tflite")
     interpreter.allocate_tensors()
     return interpreter
 
@@ -49,17 +49,20 @@ if uploaded_file:
         img = img.astype(np.uint8)
 
     # --------------------------
-    # Predict
+    # Prediction
     # --------------------------
     interpreter.set_tensor(input_details[0]['index'], img)
     interpreter.invoke()
+
     pred = interpreter.get_tensor(output_details[0]['index'])[0][0]
 
-    st.write("Raw:", float(pred))
+    confidence = float(pred)
 
-    if pred > 0.5:
-        st.error("⚠️ Microplastic")
+    st.write("Raw Output:", confidence)
+
+    if confidence > 0.5:
+        st.error("⚠️ Microplastic Detected")
     else:
         st.success("💧 Clean Water")
 
-    st.progress(float(pred))
+    st.progress(confidence)
