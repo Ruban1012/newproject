@@ -77,21 +77,28 @@ if uploaded_file:
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
     # --------------------------
-    # ✅ FIXED PREPROCESSING
+    # ✅ AUTO PREPROCESS (FINAL FIX)
     # --------------------------
-    img = image.resize((224, 224))
+    input_shape = input_details[0]['shape']
+    input_dtype = input_details[0]['dtype']
+
+    height = input_shape[1]
+    width = input_shape[2]
+
+    img = image.resize((width, height))
     img = np.array(img)
 
     # Fix RGBA → RGB
     if img.shape[-1] == 4:
         img = img[:, :, :3]
 
-    img = img.astype(np.float32) / 255.0
     img = np.expand_dims(img, axis=0)
 
-    # Match model dtype
-    if input_details[0]['dtype'] == np.uint8:
-        img = (img * 255).astype(np.uint8)
+    # Handle dtype automatically
+    if input_dtype == np.float32:
+        img = img.astype(np.float32) / 255.0
+    elif input_dtype == np.uint8:
+        img = img.astype(np.uint8)
 
     # --------------------------
     # Prediction
