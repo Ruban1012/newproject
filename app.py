@@ -10,29 +10,10 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Microplastic Detection", layout="wide")
 
 # --------------------------
-# UI Styling
+# UI
 # --------------------------
-st.markdown("""
-<style>
-.big-title {
-    text-align: center;
-    font-size: 40px;
-    font-weight: bold;
-    color: #00bcd4;
-}
-.sub-text {
-    text-align: center;
-    color: #aaaaaa;
-    font-size: 18px;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# --------------------------
-# Header
-# --------------------------
-st.markdown('<p class="big-title">🌊 Microplastic Detection System</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-text">AI-powered water quality analysis using MobileNetV2</p>', unsafe_allow_html=True)
+st.title("🌊 Microplastic Detection System")
+st.markdown("AI-powered water quality analysis")
 
 st.markdown("---")
 
@@ -52,32 +33,23 @@ output_details = interpreter.get_output_details()
 # --------------------------
 # Sidebar
 # --------------------------
-st.sidebar.title("📌 About Project")
-st.sidebar.write("""
-This system uses Deep Learning (MobileNetV2)  
-to detect microplastics in water samples.
-""")
-
 threshold = st.sidebar.slider("Detection Threshold", 0.3, 0.9, 0.5)
 
 # --------------------------
-# Upload Section
+# Upload
 # --------------------------
-st.markdown("## 📤 Upload Water Sample Image")
-
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "png", "jpeg"])
+uploaded_file = st.file_uploader("Upload Image", type=["jpg", "png", "jpeg"])
 
 if uploaded_file:
     image = Image.open(uploaded_file)
 
     col1, col2 = st.columns(2)
 
-    # Show Image
     with col1:
         st.image(image, caption="Uploaded Image", use_column_width=True)
 
     # --------------------------
-    # ✅ AUTO PREPROCESS (FINAL FIX)
+    # AUTO PREPROCESS
     # --------------------------
     input_shape = input_details[0]['shape']
     input_dtype = input_details[0]['dtype']
@@ -94,10 +66,10 @@ if uploaded_file:
 
     img = np.expand_dims(img, axis=0)
 
-    # Handle dtype automatically
+    # Match dtype
     if input_dtype == np.float32:
         img = img.astype(np.float32) / 255.0
-    elif input_dtype == np.uint8:
+    else:
         img = img.astype(np.uint8)
 
     # --------------------------
@@ -110,36 +82,40 @@ if uploaded_file:
     confidence = float(prediction)
 
     # --------------------------
-    # Result UI
+    # CORRECT LABEL LOGIC
+    # --------------------------
+    if confidence >= 0.5:
+        label = "Microplastic"
+    else:
+        label = "Clean Water"
+
+    # --------------------------
+    # UI RESULT
     # --------------------------
     with col2:
-        st.markdown("## 🔍 Prediction Result")
+        st.subheader("🔍 Prediction Result")
 
-        if confidence >= threshold:
-            st.error("⚠️ Microplastic Detected")
+        st.write("Raw Prediction:", confidence)  # DEBUG (remove later)
+
+        if label == "Microplastic":
+            st.error(f"⚠️ Microplastic Detected ({confidence*100:.2f}%)")
         else:
-            st.success("💧 Clean Water")
+            st.success(f"💧 Clean Water ({(1-confidence)*100:.2f}%)")
 
-        st.metric("Confidence Score", f"{confidence*98:.2f}%")
-
-        if 0.4 < confidence < 0.6:
-            st.warning("⚠️ Model is uncertain about this prediction")
-
+        # Progress bar
         st.progress(confidence)
 
         # --------------------------
         # Graph
         # --------------------------
-        st.markdown("### 📊 Confidence Distribution")
+        st.markdown("### 📊 Confidence")
 
-        labels = ['Clean Water', 'Microplastic']
+        labels = ["Clean", "Microplastic"]
         values = [1-confidence, confidence]
 
         fig, ax = plt.subplots()
         ax.bar(labels, values)
         ax.set_ylim(0, 1)
-        ax.set_ylabel("Probability")
-        ax.set_title("Prediction Confidence")
 
         st.pyplot(fig)
 
@@ -147,4 +123,4 @@ if uploaded_file:
 # Footer
 # --------------------------
 st.markdown("---")
-st.markdown("👨‍💻 Final Year Project | Microplastic Detection using Deep Learning")
+st.markdown("Final Year Project | Microplastic Detection")
